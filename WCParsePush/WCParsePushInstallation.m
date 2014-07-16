@@ -23,7 +23,9 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
 @property (strong, nonatomic) NSString *restAPIKey;
 @property (strong, nonatomic) NSURLSession *urlSession;
 @property (strong, nonatomic) NSString *objectId;
-@property (strong, nonatomic) NSDictionary *eventuallySaveData;
+
+@property (assign, nonatomic) BOOL shouldSaveEventually;
+@property (strong, nonatomic) NSDictionary *saveData;
 
 @property (strong, nonatomic) NSURLSessionDataTask *saveDataTask;
 @property (strong, nonatomic) NSURLSessionDataTask *loadDataTask;
@@ -42,10 +44,6 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         _currentInstallation = [[WCParsePushInstallation alloc] init];
-        
-        if(TARGET_IPHONE_SIMULATOR) {
-            _currentInstallation.deviceToken = @"simulator";
-        }
     });
     
     return _currentInstallation;
@@ -92,8 +90,7 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
 - (void)setDeviceToken:(NSString *)deviceToken
 {
     _deviceToken = deviceToken;
-    
-    [self loadInstallation];
+    [self loadInstallationData];
 }
 
 - (void)setBadge:(NSInteger)badge
@@ -209,16 +206,11 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
 
 - (void)saveEventuallyWithBlock:(WCParsePushBooleanResultBlock)block
 {
-    self.eventuallySaveData = [self dictionary];
+    [self storeTempData];
     
-    [self storeInstallation];
-
     WCParsePushInstallation __weak *weakself = self;
     self.operation = [KSReachableOperation operationWithHost:@"https://api.parse.com" allowWWAN:YES onReachabilityAchieved:^{
         [weakself performSaveWithBlock:^(BOOL succeeded, NSError *error) {
-            if(succeeded && !error) {
-                weakself.eventuallySaveData = nil;
-            }
             if(block) block(succeeded, error);
         }];
     }];
@@ -228,16 +220,12 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
 
 - (void)performSaveWithBlock:(WCParsePushBooleanResultBlock)block
 {
-    if(self.eventuallySaveData) {
-        NSMutableDictionary *saveData = [NSMutableDictionary dictionaryWithDictionary:[self dictionary]];
-        [saveData setObject:@(YES) forKey:@"saveEventually"];
-        self.eventuallySaveData = [NSDictionary dictionaryWithDictionary:saveData];
-        
-        [self storeInstallation];
+    if(self.shouldSaveEventually) {
+        [self storeTempData];
     }
     
     if(TARGET_IPHONE_SIMULATOR) {
-        [self storeInstallation];
+        [self storeInstallationData];
         if(block) block(YES, nil);
         return;
     }
@@ -255,12 +243,17 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
         
         NSInteger statusCode = [(NSHTTPURLResponse *)response statusCode];
         BOOL succeeded = (statusCode == 200 || statusCode == 201) && (error == nil);
+
+        if(!error && self.shouldSaveEventually) {
+            [weakself removeTempData];
+        }
         
         if(!succeeded && !error) error = [weakself errorFromResponseObject:responseObject];
         
         if(succeeded) {
             if(!weakself.objectId) weakself.objectId = [responseObject objectForKey:@"objectId"];
-            [weakself storeInstallation];
+            
+            [weakself storeInstallationData];
 
             dispatch_async(dispatch_get_main_queue(), ^{
                 if([weakself.delegate respondsToSelector:@selector(parsePushInstallationDidSave:)]) {
@@ -348,7 +341,8 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
             if(!weakself.objectId) weakself.objectId = [responseObject objectForKey:@"objectId"];
             weakself.channels = [NSSet setWithArray:[responseObject objectForKey:@"channels"]];
             weakself.badge = [[responseObject objectForKey:@"badge"] integerValue];
-            [self storeInstallation];
+            
+            [weakself storeInstallationData];
 
             dispatch_async(dispatch_get_main_queue(), ^{
                 if([weakself.delegate respondsToSelector:@selector(parsePushInstallationDidLoad:)]) {
@@ -415,7 +409,7 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
     return hexToken;
 }
 
-- (void)loadInstallation
+- (void)loadInstallationData
 {
     NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:[self pathForInstallationDictionary]];
     if(dict) {
@@ -430,25 +424,60 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
     else {
         [self performLoadWithBlock:NULL];
     }
+    
+    dict = [NSDictionary dictionaryWithContentsOfFile:[self pathForTempDictionary]];
+    if(dict) {
+        self.objectId = [dict objectForKey:@"objectId"];
+        self.channels = [NSSet setWithArray:[dict objectForKey:@"channels"]];
+        self.badge = [[dict objectForKey:@"badge"] integerValue];
+        
+        [self saveEventually];
+    }
+    
 }
 
-- (void)storeInstallation
+- (void)storeInstallationData
 {
-    NSMutableDictionary *saveData;
-    
-    if(self.eventuallySaveData) {
-        saveData = [NSMutableDictionary dictionaryWithDictionary:self.eventuallySaveData];
-        [saveData setObject:@(YES) forKey:@"saveEventually"];
+    [[self dictionary] writeToFile:[self pathForInstallationDictionary] atomically:YES];
+}
+
+- (void)storeTempData
+{
+    [[self dictionary] writeToFile:[self pathForTempDictionary] atomically:YES];
+    self.shouldSaveEventually = YES;
+}
+
+- (void)removeTempData
+{
+    NSError *error = nil;
+    [[NSFileManager defaultManager] removeItemAtPath:[self pathForTempDictionary] error:&error];
+
+    if(error && [self.delegate respondsToSelector:@selector(parsePushInstallation:didFailWithError:)]) {
+        [self.delegate parsePushInstallation:self didFailWithError:error];
     }
     else {
-        saveData = [NSMutableDictionary dictionaryWithDictionary:[self dictionary]];
+        self.shouldSaveEventually = NO;
     }
-    [saveData writeToFile:[self pathForInstallationDictionary] atomically:YES];
 }
 
 - (NSString *)pathForInstallationDictionary
 {
-    NSString *filename = [NSString stringWithFormat:@"PasePushInstallation-%@.plist",self.deviceToken];
+    return [self pathForDictionaryWithBasename:@"PasePushInstallation"];
+}
+
+- (NSString *)pathForTempDictionary
+{
+    return [self pathForDictionaryWithBasename:@"TempInstallation"];
+}
+
+- (NSString *)pathForDictionaryWithBasename:(NSString *)basename
+{
+    NSString *deviceToken = self.deviceToken;
+    if(TARGET_IPHONE_SIMULATOR) {
+        deviceToken = @"simulator";
+    }
+
+    NSString *filename = [NSString stringWithFormat:@"%@-%@.plist", basename, deviceToken];
     return [[WCParsePushInstallation applicationDocumentsDirectory] stringByAppendingPathComponent:filename];
 }
 
