@@ -33,8 +33,8 @@ typedef void (^WCParsePushBooleanResultBlock)(BOOL succeeded, NSError *error);
 + (NSString *)getRestAPIKey;
 
 // Channel Methods
-- (void)addChannel:(NSString *)channel;
-- (void)removeChannel:(NSString *)channel;
+- (BOOL)addChannel:(NSString *)channel;
+- (BOOL)removeChannel:(NSString *)channel;
 
 // Save Methods
 - (BOOL)save;

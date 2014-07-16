@@ -112,18 +112,30 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
 
 #pragma mark - Channel Methods
 
-- (void)addChannel:(NSString *)channel
+- (BOOL)addChannel:(NSString *)channel
 {
-    NSMutableSet *channels = [NSMutableSet setWithSet:self.channels];
-    [channels addObject:channel];
-    self.channels = [NSSet setWithSet:channels];
+    if(![WCParsePushInstallation channelIsValid:channel]) {
+        return NO;
+    }
+    else {
+        NSMutableSet *channels = [NSMutableSet setWithSet:self.channels];
+        [channels addObject:channel];
+        self.channels = [NSSet setWithSet:channels];
+        return YES;
+    }
 }
 
-- (void)removeChannel:(NSString *)channel
+- (BOOL)removeChannel:(NSString *)channel
 {
-    NSMutableSet *channels = [NSMutableSet setWithSet:self.channels];
-    [channels removeObject:channel];
-    self.channels = [NSSet setWithSet:channels];
+    if(![self.channels containsObject:channel]) {
+        return NO;
+    }
+    else {
+        NSMutableSet *channels = [NSMutableSet setWithSet:self.channels];
+        [channels removeObject:channel];
+        self.channels = [NSSet setWithSet:channels];
+        return YES;
+    }
 }
 
 #pragma mark - Application Id and Client Key methods
@@ -457,6 +469,12 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
     [dict setObject:@(self.badge) forKey:@"badge"];
     
     return [NSDictionary dictionaryWithDictionary:dict];
+}
+
++ (BOOL)channelIsValid:(NSString *)channel
+{
+    NSRange range = [channel rangeOfString:@"^[A-Z][A-Z0-9-_]+$" options:NSRegularExpressionSearch|NSCaseInsensitiveSearch];
+    return range.location != NSNotFound;
 }
 
 @end
