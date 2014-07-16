@@ -22,10 +22,10 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
 @property (strong, nonatomic) NSString *applicationId;
 @property (strong, nonatomic) NSString *restAPIKey;
 @property (strong, nonatomic) NSURLSession *urlSession;
-@property (strong, nonatomic) NSString *objectId;
 
-@property (assign, nonatomic) BOOL shouldSaveEventually;
-@property (strong, nonatomic) NSDictionary *saveData;
+@property (strong, nonatomic) WCParsePushData *eventuallySaveData;
+@property (strong, nonatomic) WCParsePushData *saveData;
+@property (strong, nonatomic) WCParsePushData *parseData;
 
 @property (strong, nonatomic) NSURLSessionDataTask *saveDataTask;
 @property (strong, nonatomic) NSURLSessionDataTask *loadDataTask;
@@ -35,7 +35,8 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
 
 @implementation WCParsePushInstallation
 
-@synthesize deviceType = _deviceType;
+@synthesize deviceToken = _deviceToken;
+@synthesize badge = _badge;
 
 #pragma mark - Singleton Methods
 
@@ -49,13 +50,23 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
     return _currentInstallation;
 }
 
-#pragma mark - Getter/Setter Methods
+#pragma mark - Initialization Methods
 
-- (NSString *)deviceType
+- (instancetype)init
 {
-    if(!_deviceType) _deviceType = @"ios";
-    return _deviceType;
+    self = [super init];
+    if (self) {
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationWillResignActive:) name:UIApplicationWillResignActiveNotification object:nil];
+    }
+    return self;
 }
+
+- (void)dealloc
+{
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+#pragma mark - Getter/Setter Methods
 
 - (NSURLSession *)urlSession
 {
@@ -206,8 +217,8 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
 
 - (void)saveEventuallyWithBlock:(WCParsePushBooleanResultBlock)block
 {
-    [self storeTempData];
-    
+    self.eventuallySaveData = [[WCParsePushData alloc] initWithParsePushData:self];
+
     WCParsePushInstallation __weak *weakself = self;
     self.operation = [KSReachableOperation operationWithHost:@"https://api.parse.com" allowWWAN:YES onReachabilityAchieved:^{
         [weakself performSaveWithBlock:^(BOOL succeeded, NSError *error) {
@@ -216,19 +227,19 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
     }];
 }
 
+#pragma mark - Notifications Methods
+
+- (void)applicationWillResignActive:(NSNotification *)notification
+{
+    if(self.parseData) [self storeInstallationData];
+    if(self.eventuallySaveData) [self storeTempData];
+}
+
 #pragma mark - Private Methods
 
 - (void)performSaveWithBlock:(WCParsePushBooleanResultBlock)block
 {
-    if(self.shouldSaveEventually) {
-        [self storeTempData];
-    }
-    
-    if(TARGET_IPHONE_SIMULATOR) {
-        [self storeInstallationData];
-        if(block) block(YES, nil);
-        return;
-    }
+    self.saveData = [[WCParsePushData alloc] initWithParsePushData:self];
     
     NSURLRequest *request = [self saveRequest];
 
@@ -244,17 +255,25 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
         NSInteger statusCode = [(NSHTTPURLResponse *)response statusCode];
         BOOL succeeded = (statusCode == 200 || statusCode == 201) && (error == nil);
 
-        if(!error && self.shouldSaveEventually) {
+        if(!error) {
             [weakself removeTempData];
         }
         
         if(!succeeded && !error) error = [weakself errorFromResponseObject:responseObject];
         
         if(succeeded) {
-            if(!weakself.objectId) weakself.objectId = [responseObject objectForKey:@"objectId"];
+            if(!weakself.objectId) {
+                weakself.objectId = [responseObject objectForKey:@"objectId"];                
+            }
             
-            [weakself storeInstallationData];
+            if(!weakself.saveData.objectId) {
+                weakself.saveData.objectId = weakself.objectId;
+            }
 
+            weakself.parseData = weakself.saveData;
+            weakself.saveData = nil;
+            weakself.eventuallySaveData = nil;
+            
             dispatch_async(dispatch_get_main_queue(), ^{
                 if([weakself.delegate respondsToSelector:@selector(parsePushInstallationDidSave:)]) {
                     [weakself.delegate parsePushInstallationDidSave:weakself];
@@ -305,23 +324,21 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request setHTTPMethod:method];
     
-    NSMutableDictionary *body = [NSMutableDictionary dictionaryWithCapacity:3];
-    [body setObject:self.deviceType forKey:@"deviceType"];
-    [body setObject:self.deviceToken forKey:@"deviceToken"];
-    [body setObject:@(self.badge) forKey:@"badge"];
-    if(self.channels) [body setObject:[self.channels allObjects] forKey:@"channels"];
+    if(self.saveData) {
+        NSError *error = nil;
+        NSData *data = [NSJSONSerialization dataWithJSONObject:[self.saveData dictionary] options:0 error:&error];
+        
+        NSAssert(!error, @"Parse request body failed: %@ - %@", error.localizedDescription, error.userInfo);
+        
+        [request setHTTPBody:data];
+    }
     
-    NSError *error = nil;
-    NSData *data = [NSJSONSerialization dataWithJSONObject:body options:0 error:&error];
-    
-    NSAssert(!error, @"Parse request body failed: %@ - %@", error.localizedDescription, error.userInfo);
-    
-    [request setHTTPBody:data];
     return request;
 }
 
 - (void)performLoadWithBlock:(WCParsePushBooleanResultBlock)block
 {
+    self.saveData = [[WCParsePushData alloc] initWithParsePushData:self];
     NSURLRequest *request = [self saveRequest];
     
     if(!request) return;
@@ -341,8 +358,10 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
             if(!weakself.objectId) weakself.objectId = [responseObject objectForKey:@"objectId"];
             weakself.channels = [NSSet setWithArray:[responseObject objectForKey:@"channels"]];
             weakself.badge = [[responseObject objectForKey:@"badge"] integerValue];
+
             
-            [weakself storeInstallationData];
+            weakself.parseData = weakself.saveData;
+            weakself.saveData = nil;
 
             dispatch_async(dispatch_get_main_queue(), ^{
                 if([weakself.delegate respondsToSelector:@selector(parsePushInstallationDidLoad:)]) {
@@ -376,16 +395,6 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
     [self.loadDataTask resume];
 }
 
-- (NSURLRequest *)loadRequest
-{
-    if([self.deviceToken length] == 0) return nil;
-    
-    NSString *query = [NSString stringWithFormat:@"where={\"deviceType\":\"%@\",\"deviceToken\":\"%@\"}", self.deviceType, self.deviceToken];
-    NSString *urlString = [NSString stringWithFormat:@"%@?%@", kParseRestAPIUrl, [query stringByReplacingPercentEscapesUsingEncoding:NSUTF8StringEncoding]];
-
-    return [NSURLRequest requestWithURL:[NSURL URLWithString:urlString]];
-}
-
 - (NSError *)errorFromResponseObject:(NSDictionary *)object
 {
     NSString *description = [object objectForKey:@"error"];
@@ -411,12 +420,31 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
 
 - (void)loadInstallationData
 {
-    NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:[self pathForInstallationDictionary]];
+    BOOL loadedFromFile = NO;
+    
+    NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:[self pathForTempDictionary]];
     if(dict) {
         self.objectId = [dict objectForKey:@"objectId"];
         self.channels = [NSSet setWithArray:[dict objectForKey:@"channels"]];
         self.badge = [[dict objectForKey:@"badge"] integerValue];
         
+        self.eventuallySaveData = [[WCParsePushData alloc] initWithParsePushData:self];
+        
+        [self saveEventually];
+        loadedFromFile = YES;
+    }
+    else {
+        NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:[self pathForInstallationDictionary]];
+        if(dict) {
+            self.objectId = [dict objectForKey:@"objectId"];
+            self.channels = [NSSet setWithArray:[dict objectForKey:@"channels"]];
+            self.badge = [[dict objectForKey:@"badge"] integerValue];
+            
+            loadedFromFile = YES;
+        }
+    }
+    
+    if(loadedFromFile) {
         if([self.delegate respondsToSelector:@selector(parsePushInstallationDidLoad:)]) {
             [self.delegate parsePushInstallationDidLoad:self];
         }
@@ -424,40 +452,21 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
     else {
         [self performLoadWithBlock:NULL];
     }
-    
-    dict = [NSDictionary dictionaryWithContentsOfFile:[self pathForTempDictionary]];
-    if(dict) {
-        self.objectId = [dict objectForKey:@"objectId"];
-        self.channels = [NSSet setWithArray:[dict objectForKey:@"channels"]];
-        self.badge = [[dict objectForKey:@"badge"] integerValue];
-        
-        [self saveEventually];
-    }
-    
 }
 
 - (void)storeInstallationData
 {
-    [[self dictionary] writeToFile:[self pathForInstallationDictionary] atomically:YES];
+    [[self.parseData dictionary] writeToFile:[self pathForInstallationDictionary] atomically:YES];
 }
 
 - (void)storeTempData
 {
-    [[self dictionary] writeToFile:[self pathForTempDictionary] atomically:YES];
-    self.shouldSaveEventually = YES;
+    [[self.eventuallySaveData dictionary] writeToFile:[self pathForTempDictionary] atomically:YES];
 }
 
 - (void)removeTempData
 {
-    NSError *error = nil;
-    [[NSFileManager defaultManager] removeItemAtPath:[self pathForTempDictionary] error:&error];
-
-    if(error && [self.delegate respondsToSelector:@selector(parsePushInstallation:didFailWithError:)]) {
-        [self.delegate parsePushInstallation:self didFailWithError:error];
-    }
-    else {
-        self.shouldSaveEventually = NO;
-    }
+    [[NSFileManager defaultManager] removeItemAtPath:[self pathForTempDictionary] error:nil];
 }
 
 - (NSString *)pathForInstallationDictionary
@@ -486,18 +495,6 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
     NSString *basePath = ([paths count] > 0) ? [paths objectAtIndex:0] : nil;
     return basePath;
-}
-
-- (NSDictionary *)dictionary
-{
-    NSMutableDictionary *dict = [NSMutableDictionary dictionaryWithCapacity:4];
-    if(self.objectId) [dict setObject:self.objectId forKey:@"objectId"];
-    if(self.deviceToken) [dict setObject:self.deviceToken forKey:@"deviceToken"];
-    if(self.deviceType) [dict setObject:self.deviceType forKey:@"deviceType"];
-    if(self.channels) [dict setObject:[self.channels allObjects] forKey:@"channels"];
-    [dict setObject:@(self.badge) forKey:@"badge"];
-    
-    return [NSDictionary dictionaryWithDictionary:dict];
 }
 
 + (BOOL)channelIsValid:(NSString *)channel

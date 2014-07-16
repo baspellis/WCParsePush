@@ -7,6 +7,7 @@
 //
 
 #import <Foundation/Foundation.h>
+#import "WCParsePushData.h"
 
 extern NSString * const WCParsePushErrorDomain;
 
@@ -14,15 +15,11 @@ typedef void (^WCParsePushBooleanResultBlock)(BOOL succeeded, NSError *error);
 
 @protocol WCParsePushInstallationDelegate;
 
-@interface WCParsePushInstallation : NSObject
+@interface WCParsePushInstallation : WCParsePushData
 
 + (instancetype)currentInstallation;
 
 @property (weak, nonatomic) id<WCParsePushInstallationDelegate> delegate;
-@property (strong, nonatomic, readonly) NSString *deviceType;
-@property (strong, nonatomic) NSString *deviceToken;
-@property (strong, nonatomic) NSSet *channels;
-@property (assign, nonatomic) NSInteger badge;
 
 // Device Token Methods
 - (void)setDeviceTokenFromData:(NSData *)deviceTokenData;
