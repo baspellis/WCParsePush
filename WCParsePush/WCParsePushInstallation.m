@@ -63,7 +63,7 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
 {
     if(!_urlSession) {
         NSURLSessionConfiguration *sessionConfiguration = [NSURLSessionConfiguration defaultSessionConfiguration];
-        
+
         NSMutableDictionary *headers = [NSMutableDictionary dictionaryWithCapacity:3];
         [headers setObject:@"application/json" forKey: @"Content-Type"];
         if(self.applicationId) [headers setObject:self.applicationId forKey:kParseHeaderApplicationId];
@@ -136,7 +136,6 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
     if([restAPIKey length] == 0) {
         [NSException raise:NSInvalidArgumentException format:@"Parse REST API key cannot be empty."];
     }
-    
     WCParsePushInstallation *currentInstallation = [WCParsePushInstallation currentInstallation];
     [currentInstallation setApplicationId:applicationId];
     [currentInstallation setRestAPIKey:restAPIKey];
@@ -245,13 +244,26 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
         NSInteger statusCode = [(NSHTTPURLResponse *)response statusCode];
         BOOL succeeded = (statusCode == 200 || statusCode == 201) && (error == nil);
         
+        if(!succeeded && !error) error = [weakself errorFromResponseObject:responseObject];
+        
         if(succeeded) {
             if(!weakself.objectId) weakself.objectId = [responseObject objectForKey:@"objectId"];
             [weakself storeInstallation];
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if([weakself.delegate respondsToSelector:@selector(parsePushInstallationDidSave:)]) {
+                    [weakself.delegate parsePushInstallationDidSave:weakself];
+                }
+            });
         }
-        
+        else {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if([weakself.delegate respondsToSelector:@selector(parsePushInstallation:didFailWithError:)]) {
+                    [weakself.delegate parsePushInstallation:weakself didFailWithError:error];
+                }
+            });
+        }
         if(block) {
-            if(!succeeded && !error) error = [weakself errorFromResponseObject:responseObject];
             
             block(succeeded, error);
         }
@@ -317,16 +329,30 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
         NSDictionary *responseObject = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingAllowFragments error: &error];
         NSInteger statusCode = [(NSHTTPURLResponse *)response statusCode];
         BOOL succeeded = (statusCode == 200 || statusCode == 201) && (error == nil);
+
+        if(!succeeded && !error) error = [weakself errorFromResponseObject:responseObject];
         
         if(succeeded) {
             if(!weakself.objectId) weakself.objectId = [responseObject objectForKey:@"objectId"];
             weakself.channels = [NSSet setWithArray:[responseObject objectForKey:@"channels"]];
             weakself.badge = [[responseObject objectForKey:@"badge"] integerValue];
             [self storeInstallation];
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if([weakself.delegate respondsToSelector:@selector(parsePushInstallationDidLoad:)]) {
+                    [weakself.delegate parsePushInstallationDidLoad:weakself];
+                }
+            });
+        }
+        else {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if([weakself.delegate respondsToSelector:@selector(parsePushInstallation:didFailWithError:)]) {
+                    [weakself.delegate parsePushInstallation:weakself didFailWithError:error];
+                }
+            });
         }
         
         if(block) {
-            if(!succeeded && !error) error = [weakself errorFromResponseObject:responseObject];
             block(succeeded, error);
         }
         
@@ -384,8 +410,9 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
         self.objectId = [dict objectForKey:@"objectId"];
         self.channels = [NSSet setWithArray:[dict objectForKey:@"channels"]];
         self.badge = [[dict objectForKey:@"badge"] integerValue];
-        if([dict objectForKey:@"saveEventually"]) {
-            [self saveEventually];
+        
+        if([self.delegate respondsToSelector:@selector(parsePushInstallationDidLoad:)]) {
+            [self.delegate parsePushInstallationDidLoad:self];
         }
     }
     else {

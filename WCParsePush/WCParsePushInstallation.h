@@ -12,10 +12,13 @@ extern NSString * const WCParsePushErrorDomain;
 
 typedef void (^WCParsePushBooleanResultBlock)(BOOL succeeded, NSError *error);
 
+@protocol WCParsePushInstallationDelegate;
+
 @interface WCParsePushInstallation : NSObject
 
 + (instancetype)currentInstallation;
 
+@property (weak, nonatomic) id<WCParsePushInstallationDelegate> delegate;
 @property (strong, nonatomic, readonly) NSString *deviceType;
 @property (strong, nonatomic) NSString *deviceToken;
 @property (strong, nonatomic) NSSet *channels;
@@ -40,5 +43,14 @@ typedef void (^WCParsePushBooleanResultBlock)(BOOL succeeded, NSError *error);
 - (void)saveInBackgroundWithBlock:(WCParsePushBooleanResultBlock)block;
 - (void)saveEventually;
 - (void)saveEventuallyWithBlock:(WCParsePushBooleanResultBlock)block;
+
+@end
+
+@protocol WCParsePushInstallationDelegate <NSObject>
+
+@optional
+- (void)parsePushInstallationDidSave:(WCParsePushInstallation *)installation;
+- (void)parsePushInstallationDidLoad:(WCParsePushInstallation *)installation;
+- (void)parsePushInstallation:(WCParsePushInstallation *)installation didFailWithError:(NSError *)error;
 
 @end
