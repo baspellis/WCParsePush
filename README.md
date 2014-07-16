@@ -1,7 +1,7 @@
 WCParsePush
 ===========
 
-Lightweight Push Notifications with Parse.
+Lightweight Push Notifications with [Parse.com](https://parse.com)
 
 ## Description
 
