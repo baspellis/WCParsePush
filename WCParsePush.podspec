@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = "WCParsePush"
-  s.version          = "1.0"
+  s.version          = "1.1"
   s.summary          = "Lightweight Push Notifications with Parse."
   s.description      = <<-DESC
                        This small library provides simple interface to the Parse Push Notification Service without the need to include the full Parse iOS SDK. It inlcudes:

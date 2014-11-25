@@ -7,8 +7,7 @@
 //
 
 #import "WCParsePushInstallation.h"
-
-#import <KSReachability/KSReachability.h>
+#import "KSReachability.h"
 
 #define kParseHeaderApplicationId @"X-Parse-Application-Id"
 #define kParseHeaderRestApiKey @"X-Parse-REST-API-Key"
