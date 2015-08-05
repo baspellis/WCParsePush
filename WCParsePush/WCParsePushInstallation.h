@@ -25,9 +25,9 @@ typedef void (^WCParsePushBooleanResultBlock)(BOOL succeeded, NSError *error);
 - (void)setDeviceTokenFromData:(NSData *)deviceTokenData;
 
 // Application Id and Client Key Methods
-+ (void)setApplicationId:(NSString *)applicationId restAPIKey:(NSString *)restAPIKey;
++ (void)setApplicationId:(NSString *)applicationId clientKey:(NSString *)clientKey;
 + (NSString *)getApplicationId;
-+ (NSString *)getRestAPIKey;
++ (NSString *)getClientKey;
 
 // Channel Methods
 - (BOOL)addChannel:(NSString *)channel;

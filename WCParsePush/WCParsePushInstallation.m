@@ -10,16 +10,16 @@
 #import "KSReachability.h"
 
 #define kParseHeaderApplicationId @"X-Parse-Application-Id"
-#define kParseHeaderRestApiKey @"X-Parse-REST-API-Key"
+#define kParseHeaderClientKey @"X-Parse-Client-Key"
 
-#define kParseRestAPIUrl @"https://api.parse.com/1/installations"
+#define kParseClientAPIUrl @"https://api.parse.com/1/classes/_Installation"
 
 NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
 
 @interface WCParsePushInstallation ()
 
 @property (strong, nonatomic) NSString *applicationId;
-@property (strong, nonatomic) NSString *restAPIKey;
+@property (strong, nonatomic) NSString *clientKey;
 @property (strong, nonatomic) NSURLSession *urlSession;
 
 @property (strong, nonatomic) WCParsePushData *eventuallySaveData;
@@ -75,7 +75,7 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
         NSMutableDictionary *headers = [NSMutableDictionary dictionaryWithCapacity:3];
         [headers setObject:@"application/json" forKey: @"Content-Type"];
         if(self.applicationId) [headers setObject:self.applicationId forKey:kParseHeaderApplicationId];
-        if(self.restAPIKey) [headers setObject:self.restAPIKey forKey:kParseHeaderRestApiKey];
+        if(self.clientKey) [headers setObject:self.clientKey forKey:kParseHeaderClientKey];
         
         [sessionConfiguration setHTTPAdditionalHeaders:headers];
         self.urlSession = [NSURLSession sessionWithConfiguration:sessionConfiguration];
@@ -147,17 +147,17 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
 
 #pragma mark - Application Id and Client Key methods
 
-+ (void)setApplicationId:(NSString *)applicationId restAPIKey:(NSString *)restAPIKey
++ (void)setApplicationId:(NSString *)applicationId clientKey:(NSString *)clientKey
 {
     if([applicationId length] == 0) {
         [NSException raise:NSInvalidArgumentException format:@"Parse application id cannot be empty."];
     }
-    if([restAPIKey length] == 0) {
-        [NSException raise:NSInvalidArgumentException format:@"Parse REST API key cannot be empty."];
+    if([clientKey length] == 0) {
+        [NSException raise:NSInvalidArgumentException format:@"Parse Client key cannot be empty."];
     }
     WCParsePushInstallation *currentInstallation = [WCParsePushInstallation currentInstallation];
     [currentInstallation setApplicationId:applicationId];
-    [currentInstallation setRestAPIKey:restAPIKey];
+    [currentInstallation setClientKey:clientKey];
     
     // Invalidate the URL session
     [currentInstallation setUrlSession:nil];
@@ -168,9 +168,9 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
     return [[WCParsePushInstallation currentInstallation] applicationId];
 }
 
-+ (NSString *)getRestAPIKey
++ (NSString *)getClientKey
 {
-    return [[WCParsePushInstallation currentInstallation] restAPIKey];
+    return [[WCParsePushInstallation currentInstallation] clientKey];
 }
 
 #pragma mark - Public Save Methods
@@ -312,11 +312,11 @@ NSString * const WCParsePushErrorDomain = @"WCParsePushErrorDomain";
     NSString *method;
     
     if(self.objectId) {
-        url = [NSURL URLWithString:[kParseRestAPIUrl stringByAppendingPathComponent:self.objectId]];
+        url = [NSURL URLWithString:[kParseClientAPIUrl stringByAppendingPathComponent:self.objectId]];
         method = @"PUT";
     }
     else {
-        url = [NSURL URLWithString:kParseRestAPIUrl];
+        url = [NSURL URLWithString:kParseClientAPIUrl];
         method = @"POST";
     }
     

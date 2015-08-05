@@ -9,18 +9,25 @@
 #import "WCAppDelegate.h"
 #import "WCParsePushInstallation.h"
 
-#warning Fill in your Parse App Id and REST API Key
+#warning Fill in your Parse App Id and Client Key
 #define kParseApplicationId @"<YOUR-APP-ID>"
-#define kParseRestAPIKey @"<YOUR-REST-API_KEY>"
+#define kParseClientKey @"<YOUR-CLIENT-KEY>"
 
 @implementation WCAppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
     // Setup Push Notifications
-    [WCParsePushInstallation setApplicationId:kParseApplicationId restAPIKey:kParseRestAPIKey];
-    [[UIApplication sharedApplication] registerForRemoteNotificationTypes:(UIRemoteNotificationTypeAlert | UIRemoteNotificationTypeSound)];
-    
+    [WCParsePushInstallation setApplicationId:kParseApplicationId clientKey:kParseClientKey];
+
+    if([[UIApplication sharedApplication] respondsToSelector:@selector(registerForRemoteNotificationTypes)]){
+        [[UIApplication sharedApplication] registerForRemoteNotificationTypes:(UIRemoteNotificationTypeAlert | UIRemoteNotificationTypeSound)];
+    } else {
+        UIUserNotificationSettings *settings = [UIUserNotificationSettings settingsForTypes: (UIRemoteNotificationTypeAlert | UIRemoteNotificationTypeSound) categories: nil];
+        [[UIApplication sharedApplication] registerUserNotificationSettings: settings];
+        [[UIApplication sharedApplication] registerForRemoteNotifications];
+    }
+
     return YES;
 }
 							

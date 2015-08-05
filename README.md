@@ -29,10 +29,10 @@ Objective-C:
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
     // Setup Push Notifications
-    [WCParsePushInstallation setApplicationId:@"<YOUR-APP-ID>" restAPIKey:@"<YOUR-REST-API_KEY>"];
+    [WCParsePushInstallation setApplicationId:@"<YOUR-APP-ID>" clientKey:@"<YOUR-CLIENT-KEY>"];
 
-  	UIUserNotificationSettings *settings = [UIUserNotificationSettings settingsForTypes:UIUserNotificationTypeAlert | UIUserNotificationTypeBadge | UIUserNotificationTypeSound categories:nil];
-  	[application registerUserNotificationSettings:settings];
+    UIUserNotificationSettings *settings = [UIUserNotificationSettings settingsForTypes:UIUserNotificationTypeAlert | UIUserNotificationTypeBadge | UIUserNotificationTypeSound categories:nil];
+    [application registerUserNotificationSettings:settings];
     [application registerForRemoteNotifications];
     
     return YES;
@@ -40,17 +40,41 @@ Objective-C:
 
 - (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken
 {
-    [[WCParsePushInstallation currentInstallation] setDeviceTokenFromData:deviceToken];    
+    [[WCParsePushInstallation currentInstallation] setDeviceTokenFromData:deviceToken];
 }
 ```
+
 Swift:
+
 ```swift
 func application(application: UIApplication, didFinishLaunchingWithOptions launchOptions: [NSObject: AnyObject]?) -> Bool {
 
     // Setup Push Notifications
-    WCParsePushInstallation.setApplicationId("<YOUR-APP-ID>", restAPIKey: "<YOUR-REST-API_KEY>")
+    WCParsePushInstallation.setApplicationId("<YOUR-APP-ID>", clientKey: "<YOUR-CLIENT-KEY>")
 
 	let settings = UIUserNotificationSettings(forTypes: UIUserNotificationType.Alert | UIUserNotificationType.Badge | UIUserNotificationType.Sound, categories: nil)
+    application.registerUserNotificationSettings(settings)
+    application.registerForRemoteNotifications()
+    
+    return YES;
+}
+
+func application(application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: NSData) {
+
+    let pushInstallation = WCParsePushInstallation.currentInstallation()
+    pushInstallation.setDeviceTokenFromData(deviceToken)
+}
+```
+
+Swift 2.0:
+
+```swift
+func application(application: UIApplication, didFinishLaunchingWithOptions launchOptions: [NSObject: AnyObject]?) -> Bool {
+
+    // Setup Push Notifications
+    WCParsePushInstallation.setApplicationId("<YOUR-APP-ID>", clientKey: "<YOUR-CLIENT-KEY>")
+
+	let settings = UIUserNotificationSettings(forTypes: [.Alert, .Badge, .Sound], categories: nil)
     application.registerUserNotificationSettings(settings)
     application.registerForRemoteNotifications()
     
