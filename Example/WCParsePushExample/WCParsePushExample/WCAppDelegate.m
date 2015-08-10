@@ -20,12 +20,12 @@
     // Setup Push Notifications
     [WCParsePushInstallation setApplicationId:kParseApplicationId clientKey:kParseClientKey];
 
-    if([[UIApplication sharedApplication] respondsToSelector:@selector(registerForRemoteNotificationTypes)]){
-        [[UIApplication sharedApplication] registerForRemoteNotificationTypes:(UIRemoteNotificationTypeAlert | UIRemoteNotificationTypeSound)];
-    } else {
-        UIUserNotificationSettings *settings = [UIUserNotificationSettings settingsForTypes: (UIRemoteNotificationTypeAlert | UIRemoteNotificationTypeSound) categories: nil];
+    if([[UIApplication sharedApplication] respondsToSelector:@selector(registerForRemoteNotifications)]){
+        UIUserNotificationSettings *settings = [UIUserNotificationSettings settingsForTypes: (UIRemoteNotificationTypeAlert | UIRemoteNotificationTypeSound | UIRemoteNotificationTypeBadge) categories: nil];
         [[UIApplication sharedApplication] registerUserNotificationSettings: settings];
         [[UIApplication sharedApplication] registerForRemoteNotifications];
+    } else {
+        [[UIApplication sharedApplication] registerForRemoteNotificationTypes:(UIRemoteNotificationTypeAlert | UIRemoteNotificationTypeSound | UIRemoteNotificationTypeBadge)];
     }
 
     return YES;
